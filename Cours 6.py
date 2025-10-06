@@ -3,6 +3,7 @@ import re
 from pydantic import BaseModel
 from dataclasses import dataclass
 from pathlib import Path
+import sys
 
 def recuperer_page(
         user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3",
@@ -18,7 +19,7 @@ def recuperer_page(
 def extraire_donnees(page: str) -> str:
     """Extraction des données de la première table de la page HTML."""
     modif_table = re.compile("<table.*?</table>")
-    resultat, *_ = modif_table.findall(page)(page.replace("\n", ""))
+    resultat, *_ = modif_table.findall(page.replace("\n", ""))
     return resultat 
 
 
@@ -37,14 +38,16 @@ class Entree(BaseModel):
     pays: str
     secteur: str
 
+class Resultat(BaseModel):
+    contenu: list[Entree]
 
 
 def extraction_entree(code_ligne: str) -> Entree:
     """Extrait le contenu d'une ligne de la table"""
-    motif_lignes = re.compile("<td>(.*?)</td>.*?<td>(.*?)</td>.*?<td>(.*?)</td>.*?<td>(.*?)</td>")
-    symbole, deuxieme, troisieme, secteur = motif_lignes.findall(code_ligne)
-    motif_deuxieme = re.compile('href=\"(.*?)\.*>(.*?)</a>')
-    url, nom = motif_deuxieme.findall(deuxieme)
+    motif_lignes = re.compile("<td>(.*?)</td>.*?<td>(.*?)</td>.*?<td>(.*?)</td>.*?<td>(.*?)</td>")   
+    symbole, deuxieme, troisieme, secteur = motif_lignes.findall(code_ligne)[0]
+    motif_deuxieme = re.compile('href="(.*?).*>(.*?)</a>')
+    url, nom = motif_deuxieme.findall(deuxieme)[0]
     motif_troisieme = re.compile('>(.*?)</a>')
     *_, pays = motif_troisieme.findall(troisieme)
 
@@ -52,12 +55,12 @@ def extraction_entree(code_ligne: str) -> Entree:
 
 
 
-def serialise(nom_fichier: str, entrees: list[Entree]):
+def serialise(nom_fichier: str, resultat: Resultat):
     chemin = Path(".").resolve() / nom_fichier
     if chemin.exists():
         raise ValueError("Le fichier existe déja !")
     else:
-       chemin.write_text(str([entree.model_dump() for entree in entrees]), encoding="utf-8")
+        chemin.write_text(resultat.model_dump_json(), encoding="utf-8")
 
 
 def main():
@@ -66,7 +69,8 @@ def main():
     code_table= extraire_donnees(code_page)
     lignes = extraction_lignes(code_table)
     entrees= [extraction_entree(code_ligne) for code_ligne in lignes]
-    serialise(nom_fichier="test.json", entrees=entrees)
+    resultat = Resultat(contenu=entrees)
+    serialise(nom_fichier="test.json", resultat=resultat)
 
 
 
